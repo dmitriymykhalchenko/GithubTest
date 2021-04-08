@@ -6,107 +6,63 @@
  * @flow strict-local
  */
 
-import React from 'react';
-import type {Node} from 'react';
-import {
-  SafeAreaView,
-  ScrollView,
-  StatusBar,
-  StyleSheet,
-  Text,
-  useColorScheme,
-  View,
-} from 'react-native';
+import React, { PureComponent } from 'react';
+import { AsyncStorage, View } from 'react-native';
+import { Provider } from 'react-redux';
+import createStore from './redux/setup';
+import { throttle } from 'lodash';
+import Application from './Application';
 
-import {
-  Colors,
-  DebugInstructions,
-  Header,
-  LearnMoreLinks,
-  ReloadInstructions,
-} from 'react-native/Libraries/NewAppScreen';
+class App extends PureComponent {
+  constructor(props) {
+    super(props);
+    this.state = {
+      isLoading: true,
+    };
 
-const Section = ({children, title}): Node => {
-  const isDarkMode = useColorScheme() === 'dark';
-  return (
-    <View style={styles.sectionContainer}>
-      <Text
-        style={[
-          styles.sectionTitle,
-          {
-            color: isDarkMode ? Colors.white : Colors.black,
-          },
-        ]}>
-        {title}
-      </Text>
-      <Text
-        style={[
-          styles.sectionDescription,
-          {
-            color: isDarkMode ? Colors.light : Colors.dark,
-          },
-        ]}>
-        {children}
-      </Text>
-    </View>
-  );
-};
+    const init = initialState => {
+      this._store = createStore({ appData: initialState });
 
-const App: () => Node = () => {
-  const isDarkMode = useColorScheme() === 'dark';
+      this._store.subscribe(
+        throttle(() => {
+          const data = this._store.getState().appData;
+          if (data) {
+            const items = data.items;
+            const recentSearches = data.recentSearches;
+            saveState({
+              items,
+              recentSearches
+            });
+          }
+        }, 1000),
+      );
+      this.setState({ isLoading: false });
+    };
 
-  const backgroundStyle = {
-    backgroundColor: isDarkMode ? Colors.darker : Colors.lighter,
-  };
+    loadState()
+      .then(state => {
+        init(state);
+      })
+      .catch(e => {
+        console.log('loadState error - ', e);
+        init();
+      });
+  }
 
-  return (
-    <SafeAreaView style={backgroundStyle}>
-      <StatusBar barStyle={isDarkMode ? 'light-content' : 'dark-content'} />
-      <ScrollView
-        contentInsetAdjustmentBehavior="automatic"
-        style={backgroundStyle}>
-        <Header />
-        <View
-          style={{
-            backgroundColor: isDarkMode ? Colors.black : Colors.white,
-          }}>
-          <Section title="Step One">
-            Edit <Text style={styles.highlight}>App.js</Text> to change this
-            screen and then come back to see your edits.
-          </Section>
-          <Section title="See Your Changes">
-            <ReloadInstructions />
-          </Section>
-          <Section title="Debug">
-            <DebugInstructions />
-          </Section>
-          <Section title="Learn More">
-            Read the docs to discover what to do next:
-          </Section>
-          <LearnMoreLinks />
-        </View>
-      </ScrollView>
-    </SafeAreaView>
-  );
-};
+  render() {
+    if (this.state.isLoading) {
+      return <View />
+    }
 
-const styles = StyleSheet.create({
-  sectionContainer: {
-    marginTop: 32,
-    paddingHorizontal: 24,
-  },
-  sectionTitle: {
-    fontSize: 24,
-    fontWeight: '600',
-  },
-  sectionDescription: {
-    marginTop: 8,
-    fontSize: 18,
-    fontWeight: '400',
-  },
-  highlight: {
-    fontWeight: '700',
-  },
-});
+    return (
+      <Provider store={this._store}>
+        <Application />
+      </Provider>
+    );
+  }
+}
+
+const saveState = state => AsyncStorage.setItem('STATE', JSON.stringify(state));
+const loadState = () => AsyncStorage.getItem('STATE').then(raw => JSON.parse(raw));
 
 export default App;
